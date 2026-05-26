@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Mkdocs build output (per-book)
+result/*/site/
+result/*/_site/
+
+# Тяжёлые входные артефакты: PDF и PNG не нужны в git
+# (но text.txt и chapter_map.json — нужны, без них пайплайн не возобновится)
+result/*/extracted/pages/
+result/*/extracted/images/
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

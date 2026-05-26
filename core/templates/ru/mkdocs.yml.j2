@@ -1,0 +1,112 @@
+{# Jinja-шаблон mkdocs.yml. Рендерится init_book.py / render_mkdocs.py из book.yml + chapter_map.json. #}
+site_name: {{ book.title_translated | tojson }}
+site_description: {{ book.site_description | default("Перевод книги «" ~ book.title_original ~ "»") | tojson }}
+{% if book.site.repo_url %}
+repo_name: {{ book.site.repo_name | default(book.name) }}
+repo_url: {{ book.site.repo_url }}
+edit_uri: edit/main/result/{{ book.name }}/docs/
+{% endif %}
+{% if book.site.pages_url %}
+site_url: {{ book.site.pages_url }}
+{% endif %}
+
+copyright: >
+  Оригинал © {{ book.license.attribution }}, лицензия
+  <a href="{{ book.license.url | default('https://creativecommons.org/licenses/by-nc-sa/4.0/') }}">{{ book.license.type }}</a>.
+  Перевод распространяется на условиях той же лицензии.
+  {% if book.license.attribution_url %}<br>Оригинал доступен по адресу <a href="{{ book.license.attribution_url }}">{{ book.license.attribution_url }}</a>.{% endif %}
+
+theme:
+  name: material
+  language: ru
+  features:
+    - navigation.tabs
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    {% if book.site.repo_url %}- content.action.edit{% endif %}
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Тёмная тема
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Светлая тема
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+
+plugins:
+  - search:
+      lang:
+        - ru
+        - en
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  {% if book.features.math | default(true) %}- pymdownx.arithmatex:
+      generic: true
+  {% endif %}- pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+{% if book.features.math | default(true) %}
+extra_javascript:
+  - assets/javascripts/mathjax-config.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+{% endif %}
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+# nav генерируется render_mkdocs.py из chapter_map.json — НЕ редактируй вручную ниже этого комментария.
+nav:
+  - Главная: index.md
+  - О книге: about.md
+{%- for chapter in chapters %}
+  - {{ chapter.number }}. {{ chapter.title_ru }}:
+      - chapters/{{ chapter.slug }}/index.md
+      {%- for section in chapter.sections %}
+      - {{ section.id }} {{ section.title_ru }}: chapters/{{ chapter.slug }}/section-{{ section.id | replace('.', '-') }}.md
+      {%- endfor %}
+      {%- if chapter.has_key_terms | default(true) %}
+      - Ключевые термины: chapters/{{ chapter.slug }}/key-terms.md
+      {%- endif %}
+      {%- if chapter.has_summary | default(true) %}
+      - Резюме: chapters/{{ chapter.slug }}/summary.md
+      {%- endif %}
+      {%- if chapter.has_exercises | default(true) %}
+      - Упражнения: chapters/{{ chapter.slug }}/exercises.md
+      {%- endif %}
+{%- endfor %}

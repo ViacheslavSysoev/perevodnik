@@ -1,0 +1,125 @@
+name: Build and deploy translated books
+
+on:
+  push:
+    branches: [main, stable]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      books: ${{ steps.find.outputs.books }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: find
+        name: Discover books in result/
+        shell: bash
+        run: |
+          set -euo pipefail
+          books="[]"
+          if [ -d result ]; then
+            books=$(find result -mindepth 2 -maxdepth 2 -name mkdocs.yml -printf '%h\n' \
+              | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          fi
+          echo "books=$books" >> "$GITHUB_OUTPUT"
+          echo "Found books: $books"
+
+  build:
+    needs: discover
+    if: needs.discover.outputs.books != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        book: ${{ fromJson(needs.discover.outputs.books) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build site for ${{ matrix.book }}
+        working-directory: ${{ matrix.book }}
+        run: mkdocs build --strict --site-dir _site
+
+      - name: Upload site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-${{ hashFiles(format('{0}/mkdocs.yml', matrix.book)) }}
+          path: ${{ matrix.book }}/_site
+          if-no-files-found: error
+
+  bundle:
+    needs: [discover, build]
+    if: needs.discover.outputs.books != '[]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all built sites
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Bundle into single _site/
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          books='${{ needs.discover.outputs.books }}'
+          # Каждый book.path вида "result/<имя>" → подпапка "_site/<имя>".
+          # Артефакт назван по хэшу mkdocs.yml — мэппим обратно через iteration.
+          # Берём первый артефакт из each artifact dir и кладём в _site/<имя>.
+          echo "$books" | jq -r '.[]' | while read -r book_path; do
+            name=$(basename "$book_path")
+            artifact_dir=$(ls -d artifacts/site-* | head -n1)
+            mkdir -p "_site/$name"
+            cp -r "$artifact_dir"/. "_site/$name/"
+            rm -rf "$artifact_dir"
+          done
+          # Корневой index.html — список всех книг.
+          {
+            echo '<!doctype html><meta charset="utf-8"><title>perevodnik</title>'
+            echo '<h1>Переведённые книги</h1><ul>'
+            echo "$books" | jq -r '.[]' | while read -r book_path; do
+              name=$(basename "$book_path")
+              echo "<li><a href=\"$name/\">$name</a></li>"
+            done
+            echo '</ul>'
+          } > _site/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: bundle
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
